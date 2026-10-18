@@ -1,0 +1,2118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Temple Escape: Endless 3D Runner</title>
+    <!-- Tailwind CSS for UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b1315;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        .temple-font {
+            font-family: 'Cinzel', serif;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1f3530 0%, #0a1412 100%);
+        }
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        /* Arcade / Temple Styled Buttons */
+        .game-btn {
+            background: linear-gradient(180deg, #fbbf24 0%, #d97706 50%, #b45309 100%);
+            border: 2px solid #fde68a;
+            box-shadow: 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.6), inset 0 2px 2px rgba(255,255,255,0.4);
+            color: #fffbeb;
+            text-shadow: 0 2px 2px rgba(0, 0, 0, 0.7);
+            transition: all 0.1s ease;
+        }
+        .game-btn:hover {
+            filter: brightness(1.08);
+        }
+        .game-btn:active, .game-btn.pressed {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0 #78350f, 0 2px 5px rgba(0,0,0,0.6), inset 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .stone-panel {
+            background: linear-gradient(145deg, rgba(30, 41, 35, 0.92), rgba(17, 24, 21, 0.96));
+            border: 2px solid #b45309;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.85), inset 0 0 20px rgba(245, 158, 11, 0.12);
+        }
+        .hud-badge {
+            background: rgba(15, 23, 20, 0.78);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        @keyframes floatGlow {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+        .animate-float {
+            animation: floatGlow 3s ease-in-out infinite;
+        }
+        @keyframes pulseDanger {
+            0%, 100% { opacity: 0.35; }
+            50% { opacity: 0.85; }
+        }
+        .danger-vignette {
+            background: radial-gradient(circle, transparent 52%, rgba(220, 38, 38, 0.65) 100%);
+            animation: pulseDanger 0.9s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden bg-stone-950 text-amber-50">
+
+    <!-- Main 3D Viewport Wrapper -->
+    <div id="canvas-container" class="flex-1 relative w-full h-full">
+        
+        <!-- Red Danger Vignette when Temple Beast is Chasing Closely -->
+        <div id="danger-overlay" class="hidden absolute inset-0 pointer-events-none z-10 danger-vignette transition-opacity duration-300"></div>
+
+        <!-- Top HUD Overlay -->
+        <div class="absolute top-0 left-0 right-0 p-3 sm:p-5 flex justify-between items-start pointer-events-none z-10">
+            <!-- Left Stats: Score, Best & Beast Status -->
+            <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
+                <div class="hud-badge px-3.5 py-1.5 rounded-xl flex flex-col">
+                    <span class="text-[10px] sm:text-xs uppercase tracking-wider text-amber-400 font-bold">Score</span>
+                    <span id="score-display" class="text-lg sm:text-2xl font-extrabold text-white tabular-nums">0</span>
+                </div>
+                <div class="hud-badge px-3.5 py-1.5 rounded-xl flex flex-col">
+                    <span class="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-400 font-bold">Best</span>
+                    <span id="highscore-display" class="text-lg sm:text-2xl font-extrabold text-emerald-200 tabular-nums">0</span>
+                </div>
+
+                <!-- Chaser Beast Proximity Indicator -->
+                <div id="chaser-hud" class="hud-badge px-3 py-1.5 rounded-xl flex items-center gap-2.5 border border-red-500/50 transition-all duration-300">
+                    <div id="chaser-icon-box" class="w-7 h-7 rounded-lg bg-red-950/90 border border-red-500 flex items-center justify-center text-red-400 animate-pulse">
+                        <i class="fa-solid fa-paw text-sm"></i>
+                    </div>
+                    <div class="flex flex-col min-w-[92px] sm:min-w-[115px]">
+                        <div class="flex justify-between items-center text-[10px] uppercase font-extrabold tracking-wider">
+                            <span id="chaser-status-text" class="text-red-400">BEAST ON HEELS!</span>
+                        </div>
+                        <div class="w-full h-2 bg-stone-900 rounded-full overflow-hidden mt-1 border border-stone-700">
+                            <div id="chaser-bar" class="h-full bg-gradient-to-r from-amber-500 via-red-500 to-red-600 transition-all duration-150" style="width: 100%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Hint: Camera Drag -->
+            <div class="hidden xl:flex hud-badge px-3 py-1.5 rounded-full items-center gap-2 text-xs text-stone-300">
+                <i class="fa-solid fa-compass text-amber-400"></i>
+                <span>Turn at 90° Corners • Drag mouse to orbit camera</span>
+            </div>
+
+            <!-- Right Stats: Coins, Speed & Audio/Pause -->
+            <div class="flex gap-2 sm:gap-3 items-center pointer-events-auto">
+                <div class="hud-badge px-3.5 py-1.5 rounded-xl flex items-center gap-2">
+                    <div class="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-yellow-600 to-amber-300 flex items-center justify-center shadow border border-yellow-200">
+                        <i class="fa-solid fa-coins text-stone-950 text-xs"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] uppercase tracking-wider text-amber-300 font-bold leading-none">Idols</span>
+                        <span id="coins-display" class="text-base sm:text-xl font-extrabold text-yellow-300 tabular-nums leading-tight">0</span>
+                    </div>
+                </div>
+
+                <div class="hidden sm:flex hud-badge px-3 py-1.5 rounded-xl flex-col items-center">
+                    <span class="text-[10px] uppercase tracking-wider text-orange-400 font-bold">Pace</span>
+                    <span id="speed-display" class="text-base sm:text-lg font-extrabold text-orange-200 tabular-nums">1.0x</span>
+                </div>
+
+                <button id="mute-btn" class="hud-badge w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-amber-300 hover:text-white hover:border-amber-400 active:scale-95 transition" title="Toggle Audio">
+                    <i id="mute-icon" class="fa-solid fa-volume-high text-base sm:text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Turn Indicator Prompt Banner -->
+        <div id="turn-prompt" class="hidden absolute top-24 sm:top-28 left-1/2 -translate-x-1/2 pointer-events-none z-10 flex-col items-center">
+            <div id="turn-prompt-badge" class="bg-amber-500/95 text-stone-950 font-black px-5 py-2 rounded-2xl text-sm sm:text-base tracking-wider uppercase shadow-2xl border-2 border-yellow-200 flex items-center gap-3 animate-bounce">
+                <i id="turn-prompt-icon" class="fa-solid fa-share text-xl"></i>
+                <span id="turn-prompt-text">TURN AHEAD!</span>
+            </div>
+        </div>
+
+        <!-- Dynamic Combo / Status Toast -->
+        <div id="status-toast" class="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-none z-10 opacity-0 transition-all duration-300 transform -translate-y-2">
+            <div id="status-toast-inner" class="bg-amber-500/90 text-stone-950 font-black px-4 py-1 rounded-full text-xs sm:text-sm tracking-widest uppercase shadow-lg border border-yellow-200">
+                SPEED UP!
+            </div>
+        </div>
+
+        <!-- Start / Title Screen Modal -->
+        <div id="start-modal" class="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-20 p-4">
+            <div class="stone-panel max-w-md w-full rounded-3xl p-6 sm:p-8 text-center flex flex-col items-center relative overflow-hidden">
+                <!-- Decorative Temple Torch Icon -->
+                <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-b from-amber-400 to-amber-700 p-0.5 shadow-xl mb-4 animate-float">
+                    <div class="w-full h-full bg-stone-900 rounded-[14px] flex items-center justify-center">
+                        <!-- Custom SVG Golden Idol -->
+                        <svg class="w-10 h-10 sm:w-12 sm:h-12 text-amber-400" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M32 6L44 18V34L38 42H26L20 34V18L32 6Z" fill="url(#idolGrad)" stroke="#FDE68A" stroke-width="2"/>
+                            <circle cx="27" cy="24" r="3" fill="#78350F"/>
+                            <circle cx="37" cy="24" r="3" fill="#78350F"/>
+                            <path d="M26 33H38" stroke="#78350F" stroke-width="3" stroke-linecap="round"/>
+                            <path d="M22 42H42L46 56H18L22 42Z" fill="#D97706" stroke="#FDE68A" stroke-width="2"/>
+                            <defs>
+                                <linearGradient id="idolGrad" x1="32" y1="6" x2="32" y2="42" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#FCD34D"/>
+                                    <stop offset="1" stop-color="#B45309"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                </div>
+
+                <h1 class="temple-font text-3xl sm:text-4xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 drop-shadow mb-2">
+                    TEMPLE ESCAPE
+                </h1>
+                <p class="text-stone-300 text-xs sm:text-sm mb-5 max-w-xs">
+                    Turn sharply at 90° temple corners and outrun the Demonic Temple Beast! Stumbling summons the beast right behind you!
+                </p>
+
+                <!-- Instructions Grid -->
+                <div class="w-full grid grid-cols-2 gap-2.5 text-left mb-6 bg-stone-950/70 p-3.5 rounded-2xl border border-amber-900/50 text-xs">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold shrink-0">
+                            <i class="fa-solid fa-arrows-turn-to-dots"></i>
+                        </span>
+                        <div>
+                            <div class="font-bold text-amber-200">90° Turns & Lanes</div>
+                            <div class="text-stone-400 text-[11px]">A / D or Left / Right</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold shrink-0">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </span>
+                        <div>
+                            <div class="font-bold text-amber-200">Jump Traps</div>
+                            <div class="text-stone-400 text-[11px]">W / Up / Space</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold shrink-0">
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </span>
+                        <div>
+                            <div class="font-bold text-amber-200">Slide Under</div>
+                            <div class="text-stone-400 text-[11px]">S / Down / Swipe</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 font-bold shrink-0">
+                            <i class="fa-solid fa-paw"></i>
+                        </span>
+                        <div>
+                            <div class="font-bold text-red-300">Temple Beast</div>
+                            <div class="text-stone-400 text-[11px]">Stumble = Beast Chases!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="start-btn" class="game-btn w-full py-3.5 px-6 rounded-2xl font-black text-base sm:text-lg tracking-wider uppercase flex items-center justify-center gap-3 cursor-pointer">
+                    <i class="fa-solid fa-person-running"></i>
+                    <span>Run For Your Life</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="gameover-modal" class="hidden absolute inset-0 items-center justify-center bg-black/75 backdrop-blur-sm z-20 p-4">
+            <div class="stone-panel max-w-md w-full rounded-3xl p-6 sm:p-8 text-center flex flex-col items-center">
+                <div class="w-14 h-14 rounded-full bg-red-950/90 border-2 border-red-500 flex items-center justify-center text-red-400 text-2xl mb-3 shadow-lg">
+                    <i id="gameover-icon" class="fa-solid fa-skull"></i>
+                </div>
+
+                <h2 id="gameover-title" class="temple-font text-2xl sm:text-3xl font-black tracking-wider text-red-400 mb-1">
+                    CLAIMED BY THE TEMPLE
+                </h2>
+                <p id="crash-reason" class="text-stone-300 text-xs sm:text-sm mb-5">
+                    You stumbled into an ancient stone barrier!
+                </p>
+
+                <!-- New High Score Banner -->
+                <div id="new-record-badge" class="hidden mb-4 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 text-stone-950 font-black text-xs px-4 py-1 rounded-full uppercase tracking-widest shadow">
+                    <i class="fa-solid fa-crown mr-1"></i> New High Score!
+                </div>
+
+                <!-- Score Summary Box -->
+                <div class="w-full grid grid-cols-3 gap-2 mb-6 bg-stone-950/80 p-3.5 rounded-2xl border border-amber-900/50">
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] uppercase text-stone-400 font-bold">Final Score</span>
+                        <span id="final-score" class="text-lg sm:text-xl font-black text-white tabular-nums">0</span>
+                    </div>
+                    <div class="flex flex-col items-center border-x border-stone-800">
+                        <span class="text-[10px] uppercase text-amber-400 font-bold">Coins</span>
+                        <span id="final-coins" class="text-lg sm:text-xl font-black text-amber-300 tabular-nums">0</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] uppercase text-emerald-400 font-bold">High Score</span>
+                        <span id="final-best" class="text-lg sm:text-xl font-black text-emerald-300 tabular-nums">0</span>
+                    </div>
+                </div>
+
+                <button id="restart-btn" class="game-btn w-full py-3.5 px-6 rounded-2xl font-black text-base sm:text-lg tracking-wider uppercase flex items-center justify-center gap-3 cursor-pointer">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Run Again</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Control Deck -->
+    <div class="w-full bg-stone-950 border-t-2 border-amber-900/60 px-3 py-2.5 sm:py-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6 z-20 shrink-0 shadow-2xl">
+        <div class="flex items-center justify-center gap-2.5 sm:gap-4 w-full max-w-xl">
+            <button id="btn-left" class="game-btn flex-1 py-2.5 sm:py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 select-none" aria-label="Turn or Move Left">
+                <i class="fa-solid fa-caret-left text-lg sm:text-xl"></i>
+                <span class="hidden xs:inline">LEFT / TURN</span>
+            </button>
+
+            <button id="btn-jump" class="game-btn flex-1 py-2.5 sm:py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 select-none" aria-label="Jump">
+                <i class="fa-solid fa-caret-up text-lg sm:text-xl"></i>
+                <span>JUMP</span>
+            </button>
+
+            <button id="btn-slide" class="game-btn flex-1 py-2.5 sm:py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 select-none" aria-label="Slide">
+                <i class="fa-solid fa-caret-down text-lg sm:text-xl"></i>
+                <span>SLIDE</span>
+            </button>
+
+            <button id="btn-right" class="game-btn flex-1 py-2.5 sm:py-3 px-4 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 select-none" aria-label="Turn or Move Right">
+                <span class="hidden xs:inline">RIGHT / TURN</span>
+                <i class="fa-solid fa-caret-right text-lg sm:text-xl"></i>
+            </button>
+
+            <button id="btn-reset-cam" class="hud-badge py-2.5 sm:py-3 px-3 sm:px-3.5 rounded-xl text-amber-300 hover:text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shrink-0 transition active:scale-95" title="Reset Camera View">
+                <i class="fa-solid fa-camera-rotate"></i>
+                <span class="hidden md:inline">Cam</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * TEMPLE ESCAPE: 3D ENDLESS RUNNER WITH 90° CORNERS & CHASER TEMPLE BEAST
+         * Features:
+         * 1. Procedural 90-degree Left, Right, and T-Junction Corner Turning Path
+         * 2. Animated 3D Demonic Temple Beast Pack that chases when you stumble
+         * 3. Two-Stage Stumble vs Caught System + Cliff Fall / Wall Crash Detection
+         * ============================================================================
+         */
+
+        // --- SOUND SYNTHESIZER (Web Audio API) ---
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        this.ctx = new AudioCtx();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playLaneSwitch() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    const now = this.ctx.currentTime;
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.exponentialRampToValueAtTime(340, now + 0.08);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } catch (e) {}
+            }
+
+            playCornerTurn() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(640, now + 0.14);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } catch (e) {}
+            }
+
+            playJump() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    const now = this.ctx.currentTime;
+                    osc.frequency.setValueAtTime(240, now);
+                    osc.frequency.exponentialRampToValueAtTime(580, now + 0.18);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.19);
+                } catch (e) {}
+            }
+
+            playSlide() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    const now = this.ctx.currentTime;
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(110, now + 0.16);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.17);
+                } catch (e) {}
+            }
+
+            playCoin() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc1 = this.ctx.createOscillator();
+                    const osc2 = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc1.type = 'sine';
+                    osc2.type = 'triangle';
+                    osc1.frequency.setValueAtTime(987.77, now);
+                    osc1.frequency.setValueAtTime(1318.51, now + 0.06);
+                    osc2.frequency.setValueAtTime(1975.53, now + 0.06);
+
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc1.start(now);
+                    osc2.start(now + 0.06);
+                    osc1.stop(now + 0.24);
+                    osc2.stop(now + 0.24);
+                } catch (e) {}
+            }
+
+            playBeastRoar() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    // Deep growling dual-oscillator roar
+                    const osc1 = this.ctx.createOscillator();
+                    const osc2 = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'square';
+
+                    osc1.frequency.setValueAtTime(135, now);
+                    osc1.frequency.linearRampToValueAtTime(175, now + 0.12);
+                    osc1.frequency.exponentialRampToValueAtTime(52, now + 0.55);
+
+                    osc2.frequency.setValueAtTime(92, now);
+                    osc2.frequency.exponentialRampToValueAtTime(38, now + 0.55);
+
+                    gain.gain.setValueAtTime(0.26, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
+
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc1.start(now);
+                    osc2.start(now);
+                    osc1.stop(now + 0.58);
+                    osc2.stop(now + 0.58);
+                } catch (e) {}
+            }
+
+            playCrash() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(140, now);
+                    osc.frequency.exponentialRampToValueAtTime(38, now + 0.45);
+                    gain.gain.setValueAtTime(0.28, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.45);
+                } catch (e) {}
+            }
+        }
+
+        // --- GAME CONSTANTS & CONFIGURATION ---
+        const LANE_WIDTH = 3.0;
+        const LANES = [-LANE_WIDTH, 0, LANE_WIDTH]; // -3, 0, +3
+        const SEGMENT_LENGTH = 20;
+        const BASE_SPEED = 24;
+        const MAX_SPEED = 52;
+        const SPEED_ACCELERATION = 0.5;
+        const GRAVITY = -58;
+        const JUMP_VELOCITY = 19.5;
+        const SLIDE_DURATION = 0.72;
+        const CHASER_MAX_TIME = 9.0; // Seconds of clean running required for the beast to fall back
+
+        // Direction Vectors for Grid Heading: 0 = North (-Z), 1 = East (+X), 2 = South (+Z), 3 = West (-X)
+        const DIR_VECTORS = [
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(-1, 0, 0)
+        ];
+        // Right-hand perpendicular vector for each direction (lane offset direction)
+        const RIGHT_VECTORS = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 0, -1)
+        ];
+        const DIR_YAW = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
+
+        // --- GLOBAL VARIABLES ---
+        let scene, camera, renderer, clock;
+        let playerGlowLight, dirLight;
+        let sfx = new SoundEffects();
+
+        // Game State
+        let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
+        let score = 0;
+        let coinsCollected = 0;
+        let highScore = 0;
+        let distanceRun = 0;
+        let currentSpeed = BASE_SPEED;
+        let lastSpeedMilestone = 1;
+
+        // Player World & Turn State
+        let playerGroup, torsoGroup, headMesh, hatMesh;
+        let leftArmPivot, rightArmPivot, leftLegPivot, rightLegPivot;
+        let currentLane = 1; // 0: Left, 1: Center, 2: Right
+        let laneOffset = 0;  // Smoothly interpolated lateral offset (-3 to +3)
+        let playerY = 0;
+        let playerVelocityY = 0;
+        let isJumping = false;
+        let isSliding = false;
+        let slideTimer = 0;
+        let runAnimTime = 0;
+        let currentYaw = 0;
+        let screenShakeTime = 0;
+
+        // Chaser Beast State
+        let chaserGroup;
+        let chaserBeasts = []; // Array of 3D monster monkey rigs in the pack
+        let chaserTimer = 0;   // > 0 means the beast is visible right behind the runner
+        let chaserDistanceZ = 12; // Current local Z behind player (smaller = closer)
+        let isBeingCaught = false;
+
+        // Procedural Path & Turn Queue
+        let activeSegments = [];
+        let activeCorner = null; // Currently approaching corner node
+        let currentDir = 0;      // Direction player is currently running (0..3)
+        let pathAnchor = new THREE.Vector3(0, 0, 0); // Start center of current straight run
+        let runProgress = 0;     // Distance along current straight run
+        let currentRunLength = 140; // Total length of current straight run before the corner
+
+        // Gen Cursor for building next segments after the corner
+        let genDir = 0;
+        let genCursor = new THREE.Vector3(0, 0, 0);
+        let segmentsUntilCorner = 6;
+        let queuedTurnDir = null; // Pre-buffered turn input when near a corner
+
+        // Torch Flames & Particle Bursts
+        let torchLights = [];
+        let particles = [];
+
+        // Camera Orbit Controls
+        let isDraggingCamera = false;
+        let prevMousePos = { x: 0, y: 0 };
+        let camAzimuth = 0;
+        let camElevation = 0.42;
+        const camDistance = 12.8;
+
+        // Touch Swipe Detection
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartTime = 0;
+
+        // Shared Materials
+        const materials = {};
+
+        // Load High Score safely
+        try {
+            const savedBest = localStorage.getItem('temple_escape_highscore');
+            if (savedBest) highScore = parseInt(savedBest, 10) || 0;
+        } catch (e) {
+            highScore = 0;
+        }
+
+        // --- INITIALIZATION ---
+        function initGame() {
+            const container = document.getElementById('canvas-container');
+            clock = new THREE.Clock();
+
+            // 1. Create Scene & Atmospheric Jungle Mist
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0d1b18);
+            scene.fog = new THREE.FogExp2(0x0d1b18, 0.0105);
+
+            // 2. Create Perspective Camera
+            camera = new THREE.PerspectiveCamera(
+                60,
+                container.clientWidth / container.clientHeight,
+                0.1,
+                210
+            );
+
+            // 3. Create WebGL Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // 4. Setup Lighting
+            setupLights();
+
+            // 5. Initialize Shared Materials
+            initMaterials();
+
+            // 6. Build Explorer Character & Demonic Temple Beast Chaser Pack
+            buildExplorerCharacter();
+            buildChaserBeastPack();
+
+            // 7. Build Initial Preview Track
+            resetWorldTrack();
+
+            // 8. Bind Events
+            bindEvents();
+
+            // Update Initial High Score UI
+            document.getElementById('highscore-display').textContent = highScore.toLocaleString();
+            updateCameraTransform(0.1);
+        }
+
+        function setupLights() {
+            const hemiLight = new THREE.HemisphereLight(0x88c9b9, 0x291d12, 0.68);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            dirLight = new THREE.DirectionalLight(0xffdf9e, 0.95);
+            dirLight.position.set(24, 45, 25);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 5;
+            dirLight.shadow.camera.far = 140;
+            const d = 35;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            playerGlowLight = new THREE.PointLight(0xff9d3b, 0.65, 20);
+            playerGlowLight.position.set(0, 5, 2);
+            scene.add(playerGlowLight);
+        }
+
+        function initMaterials() {
+            materials.stoneFloor = new THREE.MeshStandardMaterial({
+                color: 0x4b534d,
+                roughness: 0.88,
+                metalness: 0.08
+            });
+            materials.stoneTrim = new THREE.MeshStandardMaterial({
+                color: 0x353c37,
+                roughness: 0.92
+            });
+            materials.moss = new THREE.MeshStandardMaterial({
+                color: 0x2d4f38,
+                roughness: 0.95
+            });
+            materials.pillar = new THREE.MeshStandardMaterial({
+                color: 0x5c5749,
+                roughness: 0.85
+            });
+            materials.gold = new THREE.MeshStandardMaterial({
+                color: 0xffcf40,
+                emissive: 0x995c00,
+                emissiveIntensity: 0.35,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            materials.turnArrow = new THREE.MeshStandardMaterial({
+                color: 0x38bdf8,
+                emissive: 0x0284c7,
+                emissiveIntensity: 0.85,
+                roughness: 0.2
+            });
+            materials.hazardStone = new THREE.MeshStandardMaterial({
+                color: 0x6e655f,
+                roughness: 0.8
+            });
+            materials.hazardWood = new THREE.MeshStandardMaterial({
+                color: 0x5c3a21,
+                roughness: 0.85
+            });
+            materials.fireBeam = new THREE.MeshStandardMaterial({
+                color: 0xff5500,
+                emissive: 0xff2200,
+                emissiveIntensity: 0.85,
+                roughness: 0.3
+            });
+            materials.flame = new THREE.MeshBasicMaterial({
+                color: 0xffaa00
+            });
+            // Beast Materials
+            materials.beastFur = new THREE.MeshStandardMaterial({
+                color: 0x1c141d,
+                roughness: 0.9
+            });
+            materials.beastMane = new THREE.MeshStandardMaterial({
+                color: 0x331c24,
+                roughness: 0.95
+            });
+            materials.beastHorn = new THREE.MeshStandardMaterial({
+                color: 0xd6c7b2,
+                roughness: 0.5
+            });
+            materials.beastEye = new THREE.MeshBasicMaterial({
+                color: 0xff1100
+            });
+        }
+
+        // --- BUILD EXPLORER CHARACTER ---
+        function buildExplorerCharacter() {
+            playerGroup = new THREE.Group();
+
+            torsoGroup = new THREE.Group();
+            torsoGroup.position.set(0, 1.35, 0);
+            playerGroup.add(torsoGroup);
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.6 });
+            const vestMat = new THREE.MeshStandardMaterial({ color: 0x9c6b3b, roughness: 0.8 });
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xded5c4, roughness: 0.7 });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x3b4d3b, roughness: 0.85 });
+            const leatherMat = new THREE.MeshStandardMaterial({ color: 0x4a2c11, roughness: 0.6 });
+
+            const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.15, 0.5), vestMat);
+            torsoMesh.castShadow = true;
+            torsoGroup.add(torsoMesh);
+
+            const strapMesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.2, 0.54), leatherMat);
+            strapMesh.position.y = -0.35;
+            torsoGroup.add(strapMesh);
+
+            const packMesh = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.85, 0.35), leatherMat);
+            packMesh.position.set(0, 0.05, 0.38);
+            packMesh.castShadow = true;
+            torsoGroup.add(packMesh);
+
+            headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), skinMat);
+            headMesh.position.set(0, 0.95, 0);
+            headMesh.castShadow = true;
+            torsoGroup.add(headMesh);
+
+            hatMesh = new THREE.Group();
+            const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.08, 12), leatherMat);
+            const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.42, 0.35, 12), leatherMat);
+            crown.position.y = 0.18;
+            hatMesh.add(brim, crown);
+            hatMesh.position.set(0, 1.3, 0);
+            torsoGroup.add(hatMesh);
+
+            leftArmPivot = new THREE.Group();
+            leftArmPivot.position.set(-0.62, 0.45, 0);
+            const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), shirtMat);
+            leftArm.position.y = -0.35;
+            leftArm.castShadow = true;
+            leftArmPivot.add(leftArm);
+            torsoGroup.add(leftArmPivot);
+
+            rightArmPivot = new THREE.Group();
+            rightArmPivot.position.set(0.62, 0.45, 0);
+            const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), shirtMat);
+            rightArm.position.y = -0.35;
+            rightArm.castShadow = true;
+            rightArmPivot.add(rightArm);
+            torsoGroup.add(rightArmPivot);
+
+            leftLegPivot = new THREE.Group();
+            leftLegPivot.position.set(-0.24, 0.85, 0);
+            const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.9, 0.34), pantsMat);
+            leftLeg.position.y = -0.45;
+            leftLeg.castShadow = true;
+            leftLegPivot.add(leftLeg);
+            playerGroup.add(leftLegPivot);
+
+            rightLegPivot = new THREE.Group();
+            rightLegPivot.position.set(0.24, 0.85, 0);
+            const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.9, 0.34), pantsMat);
+            rightLeg.position.y = -0.45;
+            rightLeg.castShadow = true;
+            rightLegPivot.add(rightLeg);
+            playerGroup.add(rightLegPivot);
+
+            scene.add(playerGroup);
+        }
+
+        // --- BUILD 3D DEMON MONKEY / TEMPLE BEAST CHASER PACK ---
+        function createSingleDemonBeast(scale = 1.0) {
+            const beast = new THREE.Group();
+            beast.scale.setScalar(scale);
+
+            // Muscular hunched body
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.25, 1.65), materials.beastFur);
+            body.position.set(0, 1.25, 0);
+            body.rotation.x = 0.25;
+            body.castShadow = true;
+            beast.add(body);
+
+            // Jagged Shoulder Mane / Spikes
+            const mane = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.85, 1.1), materials.beastMane);
+            mane.position.set(0, 1.65, -0.25);
+            beast.add(mane);
+
+            // Ferocious Skull / Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.88, 0.95), materials.beastFur);
+            head.position.set(0, 1.85, -0.85);
+            head.castShadow = true;
+            beast.add(head);
+
+            // Snout / Fangs
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.45, 0.55), materials.beastMane);
+            snout.position.set(0, 1.68, -1.35);
+            beast.add(snout);
+
+            for (let s of [-0.2, 0.2]) {
+                const fang = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28, 5), materials.beastHorn);
+                fang.position.set(s, 1.52, -1.48);
+                fang.rotation.x = Math.PI;
+                beast.add(fang);
+
+                // Glowing Red Demon Eyes
+                const eye = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.1), materials.beastEye);
+                eye.position.set(s * 1.35, 1.96, -1.34);
+                beast.add(eye);
+
+                // Curved Demon Horns
+                const horn = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.75, 6), materials.beastHorn);
+                horn.position.set(s * 1.9, 2.38, -0.75);
+                horn.rotation.z = -s * 1.2;
+                horn.rotation.x = -0.3;
+                beast.add(horn);
+            }
+
+            // Powerful Front Gorilla Arms & Back Legs for Galloping Animation
+            const leftArm = new THREE.Group();
+            leftArm.position.set(-0.78, 1.5, -0.55);
+            const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 1.35, 0.42), materials.beastFur);
+            lArmMesh.position.y = -0.6;
+            lArmMesh.castShadow = true;
+            leftArm.add(lArmMesh);
+            beast.add(leftArm);
+
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0.78, 1.5, -0.55);
+            const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 1.35, 0.42), materials.beastFur);
+            rArmMesh.position.y = -0.6;
+            rArmMesh.castShadow = true;
+            rightArm.add(rArmMesh);
+            beast.add(rightArm);
+
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(-0.48, 0.95, 0.65);
+            const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 0.44), materials.beastFur);
+            lLegMesh.position.y = -0.45;
+            leftLeg.add(lLegMesh);
+            beast.add(leftLeg);
+
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0.48, 0.95, 0.65);
+            const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 0.44), materials.beastFur);
+            rLegMesh.position.y = -0.45;
+            rightLeg.add(rLegMesh);
+            beast.add(rightLeg);
+
+            return {
+                root: beast,
+                body,
+                leftArm,
+                rightArm,
+                leftLeg,
+                rightLeg
+            };
+        }
+
+        function buildChaserBeastPack() {
+            chaserGroup = new THREE.Group();
+            chaserBeasts = [];
+
+            // Alpha Beast in center + two flanking pack beasts
+            const configs = [
+                { x: 0, z: 0, scale: 1.08, phase: 0 },
+                { x: -1.65, z: 1.35, scale: 0.86, phase: 1.4 },
+                { x: 1.65, z: 1.35, scale: 0.86, phase: 2.7 }
+            ];
+
+            for (let cfg of configs) {
+                const b = createSingleDemonBeast(cfg.scale);
+                b.root.position.set(cfg.x, 0, cfg.z);
+                b.phase = cfg.phase;
+                b.baseX = cfg.x;
+                b.baseZ = cfg.z;
+                chaserGroup.add(b.root);
+                chaserBeasts.push(b);
+            }
+
+            // Fiery red aura light on the beast pack
+            const beastLight = new THREE.PointLight(0xff2200, 1.1, 14);
+            beastLight.position.set(0, 2.5, 0);
+            chaserGroup.add(beastLight);
+
+            scene.add(chaserGroup);
+        }
+
+        // --- PROCEDURAL PATH & 90-DEGREE CORNER GENERATION ---
+        function createStraightSegmentMesh(dirIndex, centerPos, spawnObstacles = true) {
+            const segGroup = new THREE.Group();
+            segGroup.position.copy(centerPos);
+            segGroup.rotation.y = DIR_YAW[dirIndex];
+
+            // Stone Causeway Floor
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(10.6, 2, SEGMENT_LENGTH), materials.stoneFloor);
+            floorMesh.position.y = -1;
+            floorMesh.receiveShadow = true;
+            segGroup.add(floorMesh);
+
+            // Lane Divider Grooves
+            for (let laneDiv of [-1.5, 1.5]) {
+                const groove = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, SEGMENT_LENGTH), materials.stoneTrim);
+                groove.position.set(laneDiv, 0.01, 0);
+                segGroup.add(groove);
+            }
+
+            const segmentFlames = [];
+
+            // Mossy Curbs & Temple Columns on Both Sides
+            for (let side of [-1, 1]) {
+                const curb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.75, SEGMENT_LENGTH), materials.stoneTrim);
+                curb.position.set(side * 5.35, 0.35, 0);
+                curb.receiveShadow = true;
+                curb.castShadow = true;
+                segGroup.add(curb);
+
+                const moss = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.2, 6), materials.moss);
+                moss.position.set(side * 5.35, 0.68, (Math.random() > 0.5 ? -3 : 3));
+                segGroup.add(moss);
+
+                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.3, 8.5, 1.3), materials.pillar);
+                pillar.position.set(side * 6.3, 4.25, 0);
+                pillar.castShadow = true;
+                pillar.receiveShadow = true;
+                segGroup.add(pillar);
+
+                const torchStand = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.22, 0.12, 0.6, 6),
+                    materials.hazardWood
+                );
+                torchStand.position.set(side * 5.5, 3.6, 0);
+                segGroup.add(torchStand);
+
+                const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), materials.flame);
+                flame.position.set(side * 5.5, 4.05, 0);
+                segGroup.add(flame);
+                torchLights.push(flame);
+                segmentFlames.push(flame);
+            }
+
+            const segData = {
+                type: 'STRAIGHT',
+                group: segGroup,
+                dir: dirIndex,
+                center: centerPos.clone(),
+                obstacles: [],
+                coins: [],
+                flames: segmentFlames
+            };
+
+            if (spawnObstacles) {
+                populateSegmentObstaclesAndCoins(segData);
+            }
+
+            scene.add(segGroup);
+            activeSegments.push(segData);
+            return segData;
+        }
+
+        function createCornerJunctionMesh(inDir, turnType, centerPos) {
+            // turnType: 'LEFT', 'RIGHT', or 'BOTH' (T-Junction)
+            const segGroup = new THREE.Group();
+            segGroup.position.copy(centerPos);
+            segGroup.rotation.y = DIR_YAW[inDir];
+
+            // Large 16x16 Stone Plaza Junction
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(16, 2, 16), materials.stoneFloor);
+            floorMesh.position.y = -1;
+            floorMesh.receiveShadow = true;
+            segGroup.add(floorMesh);
+
+            // Ancient Ruins Wall Straight Ahead (Blocks continuing straight, visually signaling the 90° turn)
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(13, 4.8, 1.4), materials.pillar);
+            frontWall.position.set(0, 2.4, -7.3);
+            frontWall.castShadow = true;
+            frontWall.receiveShadow = true;
+            segGroup.add(frontWall);
+
+            // Side Wall on Closed Side (if only LEFT or only RIGHT)
+            if (turnType === 'LEFT') {
+                const rightWall = new THREE.Mesh(new THREE.BoxGeometry(1.4, 4.5, 13), materials.pillar);
+                rightWall.position.set(6.8, 2.25, 0);
+                rightWall.castShadow = true;
+                segGroup.add(rightWall);
+            } else if (turnType === 'RIGHT') {
+                const leftWall = new THREE.Mesh(new THREE.BoxGeometry(1.4, 4.5, 13), materials.pillar);
+                leftWall.position.set(-6.8, 2.25, 0);
+                leftWall.castShadow = true;
+                segGroup.add(leftWall);
+            }
+
+            // Glowing Temple Turn Indicator Chevron on the Front Wall & Floor
+            const arrowSign = new THREE.Group();
+            arrowSign.position.set(0, 2.6, -6.4);
+
+            const createArrowChevron = (pointDir) => {
+                // pointDir: -1 for Left, +1 for Right
+                const chevron = new THREE.Group();
+                const bar1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.38, 0.2), materials.turnArrow);
+                bar1.rotation.z = pointDir * 0.65;
+                bar1.position.set(pointDir * 0.4, 0.45, 0);
+                const bar2 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.38, 0.2), materials.turnArrow);
+                bar2.rotation.z = -pointDir * 0.65;
+                bar2.position.set(pointDir * 0.4, -0.45, 0);
+                chevron.add(bar1, bar2);
+                return chevron;
+            };
+
+            if (turnType === 'LEFT' || turnType === 'BOTH') {
+                const leftChev = createArrowChevron(-1);
+                leftChev.position.x = turnType === 'BOTH' ? -2.2 : 0;
+                arrowSign.add(leftChev);
+            }
+            if (turnType === 'RIGHT' || turnType === 'BOTH') {
+                const rightChev = createArrowChevron(1);
+                rightChev.position.x = turnType === 'BOTH' ? 2.2 : 0;
+                arrowSign.add(rightChev);
+            }
+            segGroup.add(arrowSign);
+
+            // Corner Torches
+            const segmentFlames = [];
+            for (let sx of [-6.2, 6.2]) {
+                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 9, 1.5), materials.pillar);
+                pillar.position.set(sx, 4.5, -6.5);
+                pillar.castShadow = true;
+                segGroup.add(pillar);
+
+                const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), materials.flame);
+                flame.position.set(sx * 0.85, 4.6, -5.5);
+                segGroup.add(flame);
+                torchLights.push(flame);
+                segmentFlames.push(flame);
+            }
+
+            const cornerData = {
+                type: 'CORNER',
+                turnType, // 'LEFT', 'RIGHT', 'BOTH'
+                group: segGroup,
+                dir: inDir,
+                center: centerPos.clone(),
+                obstacles: [],
+                coins: [],
+                flames: segmentFlames,
+                arrowSign,
+                resolved: false
+            };
+
+            scene.add(segGroup);
+            activeSegments.push(cornerData);
+            return cornerData;
+        }
+
+        // --- OBSTACLE & COIN CREATION ON SEGMENTS ---
+        function createObstacleMesh(type) {
+            const group = new THREE.Group();
+
+            if (type === 'LOW') {
+                // Spiked Temple Log Hurdle (Jump Over, or Stumble if clipped!)
+                const log = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.45, 0.45, 2.5, 10),
+                    materials.hazardWood
+                );
+                log.rotation.z = Math.PI / 2;
+                log.position.y = 0.65;
+                log.castShadow = true;
+                log.receiveShadow = true;
+                group.add(log);
+
+                for (let s of [-1.05, 1.05]) {
+                    const post = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.35, 1.2, 0.55),
+                        materials.hazardStone
+                    );
+                    post.position.set(s, 0.6, 0);
+                    post.castShadow = true;
+                    group.add(post);
+                }
+
+                for (let x = -0.7; x <= 0.7; x += 0.7) {
+                    const spike = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.16, 0.4, 6),
+                        materials.gold
+                    );
+                    spike.position.set(x, 1.25, 0);
+                    group.add(spike);
+                }
+            } else if (type === 'HIGH') {
+                // Overhead Fire Beam Gate (Slide Under)
+                for (let s of [-1.2, 1.2]) {
+                    const sideCol = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.35, 4.2, 0.45),
+                        materials.hazardStone
+                    );
+                    sideCol.position.set(s, 2.1, 0);
+                    sideCol.castShadow = true;
+                    group.add(sideCol);
+                }
+
+                const topBlock = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.75, 2.4, 0.65),
+                    materials.hazardStone
+                );
+                topBlock.position.set(0, 2.8, 0);
+                topBlock.castShadow = true;
+                group.add(topBlock);
+
+                const fireStrip = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.55, 0.35, 0.72),
+                    materials.fireBeam
+                );
+                fireStrip.position.set(0, 1.65, 0);
+                group.add(fireStrip);
+            } else if (type === 'PILLAR') {
+                // Stone Obelisk (Switch Lanes)
+                const base = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.1, 4.4, 1.4),
+                    materials.hazardStone
+                );
+                base.position.y = 2.2;
+                base.castShadow = true;
+                base.receiveShadow = true;
+                group.add(base);
+
+                const eye = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.3, 0.35, 1.48),
+                    materials.fireBeam
+                );
+                eye.position.set(0, 2.7, 0);
+                group.add(eye);
+            }
+
+            return group;
+        }
+
+        function createCoinMesh() {
+            const coinGroup = new THREE.Group();
+            const ring = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 1), materials.gold);
+            ring.scale.set(1, 1, 0.35);
+            ring.castShadow = true;
+            coinGroup.add(ring);
+            return coinGroup;
+        }
+
+        function populateSegmentObstaclesAndCoins(segData) {
+            const laneIndices = [0, 1, 2].sort(() => Math.random() - 0.5);
+            const patternRoll = Math.random();
+
+            const addLocalObs = (laneIdx, localZ, type) => {
+                const mesh = createObstacleMesh(type);
+                mesh.position.set(LANES[laneIdx], 0, localZ);
+                segData.group.add(mesh);
+                segData.obstacles.push({
+                    mesh,
+                    lane: laneIdx,
+                    localZ,
+                    type,
+                    hit: false
+                });
+            };
+
+            const addLocalCoins = (laneIdx, centerZ, count, arcOverJump) => {
+                const spacing = 2.5;
+                const half = Math.floor(count / 2);
+                for (let i = -half; i <= half; i++) {
+                    const coinMesh = createCoinMesh();
+                    const localZ = centerZ + i * spacing;
+                    let y = 1.25;
+                    if (arcOverJump) {
+                        const norm = 1 - Math.abs(i) / (half + 0.5);
+                        y = 1.25 + norm * 2.1;
+                    }
+                    coinMesh.position.set(LANES[laneIdx], y, localZ);
+                    coinMesh.rotation.y = i * 0.4;
+                    segData.group.add(coinMesh);
+                    segData.coins.push({
+                        mesh: coinMesh,
+                        lane: laneIdx,
+                        localZ,
+                        y,
+                        collected: false
+                    });
+                }
+            };
+
+            if (patternRoll < 0.45) {
+                const obsLane = laneIndices[0];
+                const coinLane = laneIndices[1];
+                const types = ['LOW', 'HIGH', 'PILLAR'];
+                const chosenType = types[Math.floor(Math.random() * types.length)];
+                addLocalObs(obsLane, 0, chosenType);
+                addLocalCoins(coinLane, 0, 5, false);
+            } else if (patternRoll < 0.82) {
+                const laneA = laneIndices[0];
+                const laneB = laneIndices[1];
+                const freeLane = laneIndices[2];
+
+                const typesA = ['LOW', 'HIGH', 'PILLAR'];
+                const typesB = ['LOW', 'HIGH'];
+                const typeA = typesA[Math.floor(Math.random() * typesA.length)];
+                const typeB = typesB[Math.floor(Math.random() * typesB.length)];
+
+                addLocalObs(laneA, 0, typeA);
+                addLocalObs(laneB, 0, typeB);
+
+                if (typeB === 'LOW' && Math.random() < 0.55) {
+                    addLocalCoins(laneB, 0, 5, true);
+                } else {
+                    addLocalCoins(freeLane, 0, 5, false);
+                }
+            } else {
+                const unifiedType = Math.random() < 0.55 ? 'LOW' : 'HIGH';
+                for (let l = 0; l < 3; l++) {
+                    addLocalObs(l, 0, unifiedType);
+                }
+                addLocalCoins(laneIndices[0], 0, 5, unifiedType === 'LOW');
+            }
+        }
+
+        // --- PATH STREAMING & CORNER BUILDING ---
+        function clearAllSegments() {
+            for (let seg of activeSegments) {
+                scene.remove(seg.group);
+            }
+            activeSegments = [];
+            torchLights = [];
+            activeCorner = null;
+        }
+
+        function generateRunWithCorner(startAnchor, dirIndex, numSegments, safeStartCount = 1) {
+            const forward = DIR_VECTORS[dirIndex];
+
+            // Optional segment right behind the corner/anchor so camera doesn't see void
+            const backCenter = startAnchor.clone().addScaledVector(forward, -SEGMENT_LENGTH * 0.5);
+            createStraightSegmentMesh(dirIndex, backCenter, false);
+
+            for (let i = 0; i < numSegments; i++) {
+                const segCenter = startAnchor.clone().addScaledVector(forward, (i + 0.5) * SEGMENT_LENGTH);
+                // Keep first segment after a turn and final segment before a corner obstacle-free for clean turning!
+                const allowObstacles = (i >= safeStartCount) && (i < numSegments - 1);
+                createStraightSegmentMesh(dirIndex, segCenter, allowObstacles);
+            }
+
+            // Place a 90-Degree Corner Junction at the end of this straight run
+            const cornerCenter = startAnchor.clone().addScaledVector(forward, numSegments * SEGMENT_LENGTH);
+            const turnChoices = ['LEFT', 'RIGHT', 'BOTH'];
+            const turnType = turnChoices[Math.floor(Math.random() * turnChoices.length)];
+            const cornerSeg = createCornerJunctionMesh(dirIndex, turnType, cornerCenter);
+
+            // Also build preview segments branching out of the corner so the player sees the turning paths!
+            const buildPreviewBranch = (branchDir) => {
+                const bFwd = DIR_VECTORS[branchDir];
+                for (let k = 1; k <= 3; k++) {
+                    const pCenter = cornerCenter.clone().addScaledVector(bFwd, k * SEGMENT_LENGTH - 2);
+                    createStraightSegmentMesh(branchDir, pCenter, false);
+                }
+            };
+
+            if (turnType === 'LEFT' || turnType === 'BOTH') {
+                buildPreviewBranch((dirIndex + 3) % 4);
+            }
+            if (turnType === 'RIGHT' || turnType === 'BOTH') {
+                buildPreviewBranch((dirIndex + 1) % 4);
+            }
+
+            return {
+                runLength: numSegments * SEGMENT_LENGTH,
+                corner: cornerSeg
+            };
+        }
+
+        function resetWorldTrack() {
+            clearAllSegments();
+            currentDir = 0;
+            currentYaw = DIR_YAW[0];
+            pathAnchor.set(0, 0, 0);
+            runProgress = 0;
+            queuedTurnDir = null;
+
+            const built = generateRunWithCorner(pathAnchor, currentDir, 7, 2);
+            currentRunLength = built.runLength;
+            activeCorner = built.corner;
+        }
+
+        function executeCornerTurn(turnDirection) {
+            // turnDirection: 'LEFT' or 'RIGHT'
+            if (!activeCorner || activeCorner.resolved) return false;
+
+            const allowed = activeCorner.turnType;
+            const isValid =
+                allowed === 'BOTH' ||
+                (allowed === 'LEFT' && turnDirection === 'LEFT') ||
+                (allowed === 'RIGHT' && turnDirection === 'RIGHT');
+
+            if (!isValid) {
+                // Player turned the wrong way into the solid temple wall!
+                triggerGameOver(
+                    'WRONG TURN!',
+                    `You turned ${turnDirection} directly into a solid ancient temple wall!`,
+                    'fa-solid fa-burst'
+                );
+                return true;
+            }
+
+            // Valid 90-degree turn!
+            activeCorner.resolved = true;
+            sfx.playCornerTurn();
+            score += 50; // Corner turn bonus
+            showSpeedToast(`90° ${turnDirection} TURN! +50`);
+
+            // Compute new direction (0..3)
+            if (turnDirection === 'LEFT') {
+                currentDir = (currentDir + 3) % 4;
+                flashButton('btn-left');
+            } else {
+                currentDir = (currentDir + 1) % 4;
+                flashButton('btn-right');
+            }
+
+            // Snap anchor to the corner center and start the next straight run
+            const newAnchor = activeCorner.center.clone();
+            pathAnchor.copy(newAnchor);
+            runProgress = 0;
+            queuedTurnDir = null;
+
+            // Keep only recent segments briefly for visual continuity, prune old ones, and build new run ahead
+            clearAllSegments();
+            const nextSegCount = Math.floor(Math.random() * 3) + 6; // 6 to 8 segments between 90° turns
+            const built = generateRunWithCorner(pathAnchor, currentDir, nextSegCount, 1);
+            currentRunLength = built.runLength;
+            activeCorner = built.corner;
+
+            // Hide turn prompt banner
+            document.getElementById('turn-prompt').classList.add('hidden');
+            document.getElementById('turn-prompt').classList.remove('flex');
+            return true;
+        }
+
+        // --- STUMBLE & TEMPLE BEAST CHASE MECHANIC ---
+        function triggerPlayerStumble(reasonHint) {
+            screenShakeTime = 0.45;
+            sfx.playBeastRoar();
+            spawnBurst(
+                playerGroup.position.clone().add(new THREE.Vector3(0, 1.1, 0)),
+                0xff6600,
+                16
+            );
+
+            // If the Temple Beast is already right behind the player (chaserTimer > 0), a second stumble is FATAL!
+            if (chaserTimer > 0.5) {
+                isBeingCaught = true;
+                chaserDistanceZ = 1.1; // Beast lunges directly onto the player
+                updateChaserPosition(0.016);
+                triggerGameOver(
+                    'DEVOURED BY THE BEAST!',
+                    `You stumbled again while the Demonic Temple Beast was right on your heels! (${reasonHint})`,
+                    'fa-solid fa-paw'
+                );
+                return;
+            }
+
+            // First stumble: Summon the Chaser Beast right behind the runner!
+            chaserTimer = CHASER_MAX_TIME;
+            chaserDistanceZ = 3.8; // Surges right into view behind the explorer
+            currentSpeed = Math.max(BASE_SPEED * 0.88, currentSpeed * 0.85);
+            showSpeedToast('STUMBLED! THE BEAST IS RIGHT BEHIND YOU!');
+            updateChaserHUD();
+        }
+
+        function updateChaserHUD() {
+            const chaserHud = document.getElementById('chaser-hud');
+            const statusText = document.getElementById('chaser-status-text');
+            const bar = document.getElementById('chaser-bar');
+            const iconBox = document.getElementById('chaser-icon-box');
+            const dangerOverlay = document.getElementById('danger-overlay');
+
+            if (chaserTimer > 0) {
+                const pct = Math.min(100, Math.max(8, (chaserTimer / CHASER_MAX_TIME) * 100));
+                bar.style.width = `${pct}%`;
+                bar.className = 'h-full bg-gradient-to-r from-amber-500 via-red-500 to-red-600 transition-all duration-150';
+                statusText.textContent = 'BEAST ON HEELS!';
+                statusText.className = 'text-red-400 font-black';
+                iconBox.className = 'w-7 h-7 rounded-lg bg-red-950/90 border border-red-500 flex items-center justify-center text-red-400 animate-pulse';
+                chaserHud.classList.add('border-red-500');
+                dangerOverlay.classList.remove('hidden');
+            } else {
+                bar.style.width = '0%';
+                statusText.textContent = 'BEAST DISTANT';
+                statusText.className = 'text-emerald-400 font-bold';
+                iconBox.className = 'w-7 h-7 rounded-lg bg-stone-900 border border-emerald-600/50 flex items-center justify-center text-emerald-400';
+                chaserHud.classList.remove('border-red-500');
+                dangerOverlay.classList.add('hidden');
+            }
+        }
+
+        function updateChaserPosition(dt) {
+            if (gameState === 'PLAYING') {
+                if (chaserTimer > 0) {
+                    chaserTimer = Math.max(0, chaserTimer - dt);
+                    // Hold beast menacingly close behind the runner (3.7 to 5.5 units behind)
+                    const targetDist = 3.7 + (1 - chaserTimer / CHASER_MAX_TIME) * 2.2;
+                    chaserDistanceZ = THREE.MathUtils.lerp(chaserDistanceZ, targetDist, Math.min(1, dt * 7));
+                    if (chaserTimer === 0) {
+                        showSpeedToast('ESCAPED THE BEAST FOR NOW!');
+                    }
+                } else {
+                    // Fall back out of camera view when safe
+                    chaserDistanceZ = THREE.MathUtils.lerp(chaserDistanceZ, 17.5, Math.min(1, dt * 3.5));
+                }
+                updateChaserHUD();
+            }
+
+            // Hide mesh completely only when far behind camera
+            chaserGroup.visible = chaserDistanceZ < 15.0;
+            if (!chaserGroup.visible) return;
+
+            // Position the beast pack behind the player along the current running vector
+            const forward = DIR_VECTORS[currentDir];
+            const right = RIGHT_VECTORS[currentDir];
+            const beastWorldPos = pathAnchor
+                .clone()
+                .addScaledVector(forward, runProgress - chaserDistanceZ)
+                .addScaledVector(right, laneOffset * 0.85);
+
+            chaserGroup.position.copy(beastWorldPos);
+            chaserGroup.rotation.y = currentYaw;
+
+            // Galloping Animation for all 3 Demon Beasts in the pack
+            const gallopTime = clock.getElapsedTime() * 14;
+            for (let b of chaserBeasts) {
+                const phase = gallopTime + b.phase;
+                const boundY = Math.abs(Math.sin(phase)) * 0.55;
+                b.root.position.y = boundY;
+                b.body.rotation.x = 0.25 + Math.cos(phase) * 0.18;
+                b.leftArm.rotation.x = Math.sin(phase) * 1.1;
+                b.rightArm.rotation.x = Math.sin(phase + 0.4) * 1.1;
+                b.leftLeg.rotation.x = -Math.sin(phase) * 0.95;
+                b.rightLeg.rotation.x = -Math.sin(phase + 0.4) * 0.95;
+            }
+        }
+
+        // --- PARTICLE BURSTS ---
+        function spawnBurst(pos, colorHex, count = 12) {
+            const geo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+            for (let i = 0; i < count; i++) {
+                const p = new THREE.Mesh(geo, mat);
+                p.position.copy(pos);
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 8,
+                    Math.random() * 6 + 2,
+                    (Math.random() - 0.5) * 8
+                );
+                scene.add(p);
+                particles.push({ mesh: p, vel, life: 0.45 });
+            }
+        }
+
+        // --- PLAYER INPUT HANDLERS (90° CORNER TURNS + LANE SWITCHING) ---
+        function isInsideTurnZone() {
+            const distToCorner = currentRunLength - runProgress;
+            return distToCorner <= 15.5 && distToCorner >= -6.5;
+        }
+
+        function handleLeftInput() {
+            if (gameState !== 'PLAYING') return;
+
+            // If inside or approaching the 90-degree turn zone, execute or queue the corner turn!
+            const distToCorner = currentRunLength - runProgress;
+            if (isInsideTurnZone()) {
+                executeCornerTurn('LEFT');
+                return;
+            } else if (distToCorner <= 24 && distToCorner > 15.5) {
+                queuedTurnDir = 'LEFT';
+            }
+
+            // Otherwise switch lane left
+            if (currentLane > 0) {
+                currentLane--;
+                sfx.playLaneSwitch();
+                flashButton('btn-left');
+            }
+        }
+
+        function handleRightInput() {
+            if (gameState !== 'PLAYING') return;
+
+            const distToCorner = currentRunLength - runProgress;
+            if (isInsideTurnZone()) {
+                executeCornerTurn('RIGHT');
+                return;
+            } else if (distToCorner <= 24 && distToCorner > 15.5) {
+                queuedTurnDir = 'RIGHT';
+            }
+
+            // Otherwise switch lane right
+            if (currentLane < 2) {
+                currentLane++;
+                sfx.playLaneSwitch();
+                flashButton('btn-right');
+            }
+        }
+
+        function triggerJump() {
+            if (gameState !== 'PLAYING') return;
+            if (!isJumping) {
+                if (isSliding) {
+                    endSlide();
+                }
+                isJumping = true;
+                playerVelocityY = JUMP_VELOCITY;
+                sfx.playJump();
+                flashButton('btn-jump');
+            }
+        }
+
+        function triggerSlide() {
+            if (gameState !== 'PLAYING') return;
+            if (isJumping) {
+                playerVelocityY = -28;
+            }
+            isSliding = true;
+            slideTimer = SLIDE_DURATION;
+            sfx.playSlide();
+            flashButton('btn-slide');
+        }
+
+        function endSlide() {
+            isSliding = false;
+            slideTimer = 0;
+            torsoGroup.scale.y = 1;
+            torsoGroup.position.y = 1.35;
+            torsoGroup.rotation.x = 0;
+        }
+
+        function flashButton(id) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.classList.add('pressed');
+            setTimeout(() => btn.classList.remove('pressed'), 120);
+        }
+
+        // --- SMOOTH YAW & CAMERA ORBIT CONTROL ---
+        function lerpAngle(a, b, t) {
+            let diff = b - a;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            return a + diff * t;
+        }
+
+        function updateCameraTransform(dt = 0.016) {
+            // Smoothly rotate currentYaw toward the active running direction's yaw
+            const targetYaw = DIR_YAW[currentDir];
+            currentYaw = lerpAngle(currentYaw, targetYaw, Math.min(1, dt * 11));
+
+            const totalYaw = currentYaw + camAzimuth;
+            const horizontalRadius = camDistance * Math.cos(camElevation);
+
+            // Camera sits behind the player relative to currentYaw
+            const backOffsetX = Math.sin(totalYaw) * horizontalRadius;
+            const backOffsetZ = Math.cos(totalYaw) * horizontalRadius;
+            const camY = Math.max(2.2, 2.4 + camDistance * Math.sin(camElevation));
+
+            let shakeX = 0;
+            let shakeY = 0;
+            if (screenShakeTime > 0) {
+                screenShakeTime = Math.max(0, screenShakeTime - dt);
+                shakeX = (Math.random() - 0.5) * 0.65;
+                shakeY = (Math.random() - 0.5) * 0.65;
+            }
+
+            camera.position.set(
+                playerGroup.position.x + backOffsetX + shakeX,
+                camY + shakeY,
+                playerGroup.position.z + backOffsetZ
+            );
+
+            // Look ahead of the player along the current heading
+            const lookAheadX = playerGroup.position.x - Math.sin(currentYaw) * 10;
+            const lookAheadZ = playerGroup.position.z - Math.cos(currentYaw) * 10;
+            camera.lookAt(lookAheadX, 1.8 + shakeY, lookAheadZ);
+
+            // Keep directional shadow light and glow light following the player
+            if (playerGlowLight) {
+                playerGlowLight.position.set(playerGroup.position.x, 5, playerGroup.position.z);
+            }
+        }
+
+        // --- START & GAME OVER ---
+        function startGame() {
+            sfx.init();
+
+            particles.forEach(p => scene.remove(p.mesh));
+            particles = [];
+
+            resetWorldTrack();
+
+            // Reset Player State
+            currentLane = 1;
+            laneOffset = 0;
+            playerY = 0;
+            playerVelocityY = 0;
+            isJumping = false;
+            isBeingCaught = false;
+            endSlide();
+            playerGroup.position.set(0, 0, 0);
+            playerGroup.rotation.set(0, 0, 0);
+
+            // Start the run with the Temple Beast visibly chasing behind for the first 5 seconds!
+            chaserTimer = 5.0;
+            chaserDistanceZ = 4.0;
+            sfx.playBeastRoar();
+            updateChaserHUD();
+
+            // Reset Metrics
+            score = 0;
+            coinsCollected = 0;
+            distanceRun = 0;
+            currentSpeed = BASE_SPEED;
+            lastSpeedMilestone = 1;
+
+            updateHUD();
+
+            document.getElementById('start-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('flex');
+            document.getElementById('turn-prompt').classList.add('hidden');
+
+            gameState = 'PLAYING';
+            clock.getDelta();
+        }
+
+        function triggerGameOver(titleText, reasonText, iconClass = 'fa-solid fa-skull') {
+            gameState = 'GAMEOVER';
+            sfx.playCrash();
+            document.getElementById('turn-prompt').classList.add('hidden');
+            document.getElementById('danger-overlay').classList.add('hidden');
+
+            spawnBurst(
+                new THREE.Vector3(playerGroup.position.x, playerGroup.position.y + 1.2, playerGroup.position.z),
+                0xff4422,
+                22
+            );
+
+            const totalFinalScore = Math.floor(score);
+            let isNewRecord = false;
+            if (totalFinalScore > highScore) {
+                highScore = totalFinalScore;
+                isNewRecord = true;
+                try {
+                    localStorage.setItem('temple_escape_highscore', String(highScore));
+                } catch (e) {}
+            }
+
+            document.getElementById('gameover-title').textContent = titleText;
+            document.getElementById('gameover-icon').className = iconClass;
+            document.getElementById('highscore-display').textContent = highScore.toLocaleString();
+            document.getElementById('crash-reason').textContent = reasonText;
+            document.getElementById('final-score').textContent = totalFinalScore.toLocaleString();
+            document.getElementById('final-coins').textContent = coinsCollected.toLocaleString();
+            document.getElementById('final-best').textContent = highScore.toLocaleString();
+
+            const recordBadge = document.getElementById('new-record-badge');
+            if (isNewRecord && totalFinalScore > 0) {
+                recordBadge.classList.remove('hidden');
+            } else {
+                recordBadge.classList.add('hidden');
+            }
+
+            const gameOverModal = document.getElementById('gameover-modal');
+            gameOverModal.classList.remove('hidden');
+            gameOverModal.classList.add('flex');
+        }
+
+        function showSpeedToast(text) {
+            const toast = document.getElementById('status-toast');
+            const inner = document.getElementById('status-toast-inner');
+            inner.textContent = text;
+            toast.classList.remove('opacity-0', '-translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', '-translate-y-2');
+            }, 1500);
+        }
+
+        function updateHUD() {
+            document.getElementById('score-display').textContent = Math.floor(score).toLocaleString();
+            document.getElementById('coins-display').textContent = coinsCollected.toLocaleString();
+            const speedMultiplier = (currentSpeed / BASE_SPEED).toFixed(1);
+            document.getElementById('speed-display').textContent = `${speedMultiplier}x`;
+        }
+
+        function updateTurnPromptUI(distToCorner) {
+            const promptEl = document.getElementById('turn-prompt');
+            const textEl = document.getElementById('turn-prompt-text');
+            const iconEl = document.getElementById('turn-prompt-icon');
+
+            if (activeCorner && !activeCorner.resolved && distToCorner <= 38 && distToCorner >= -5) {
+                promptEl.classList.remove('hidden');
+                promptEl.classList.add('flex');
+                if (activeCorner.turnType === 'LEFT') {
+                    textEl.textContent = 'TURN LEFT! (A / ◄)';
+                    iconEl.className = 'fa-solid fa-turn-up -rotate-90 text-xl';
+                } else if (activeCorner.turnType === 'RIGHT') {
+                    textEl.textContent = 'TURN RIGHT! (D / ►)';
+                    iconEl.className = 'fa-solid fa-turn-up rotate-90 text-xl';
+                } else {
+                    textEl.textContent = 'TURN LEFT OR RIGHT! (◄ / ►)';
+                    iconEl.className = 'fa-solid fa-arrows-split-up-and-left text-xl';
+                }
+            } else {
+                promptEl.classList.add('hidden');
+                promptEl.classList.remove('flex');
+            }
+        }
+
+        // --- MAIN GAME UPDATE LOOP ---
+        function updateGame(dt) {
+            const elapsed = clock.getElapsedTime();
+
+            // Animate Torch Flames
+            for (let i = 0; i < torchLights.length; i++) {
+                const flame = torchLights[i];
+                flame.rotation.y += dt * 4;
+                const s = 0.88 + Math.sin(elapsed * 12 + i) * 0.18;
+                flame.scale.set(s, s * 1.3, s);
+            }
+
+            // Pulse Corner Turn Chevron Sign
+            if (activeCorner && activeCorner.arrowSign) {
+                const pulse = 1 + Math.sin(elapsed * 8) * 0.12;
+                activeCorner.arrowSign.scale.set(pulse, pulse, 1);
+            }
+
+            // Update active particle bursts
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.vel.y -= 18 * dt;
+                p.mesh.scale.setScalar(Math.max(0.01, p.life * 2));
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            if (gameState !== 'PLAYING') {
+                updateChaserPosition(dt);
+                updateCameraTransform(dt);
+                return;
+            }
+
+            // 1. Advance Speed & Run Progress
+            currentSpeed = Math.min(MAX_SPEED, currentSpeed + SPEED_ACCELERATION * dt);
+            const stepDist = currentSpeed * dt;
+            runProgress += stepDist;
+            distanceRun += stepDist;
+            score += stepDist * 1.5;
+
+            const currentMultiplier = Math.floor((currentSpeed / BASE_SPEED) * 2);
+            if (currentMultiplier > lastSpeedMilestone && currentSpeed > BASE_SPEED + 4) {
+                lastSpeedMilestone = currentMultiplier;
+                showSpeedToast(`TEMPLE PACE ${(currentSpeed / BASE_SPEED).toFixed(1)}x!`);
+            }
+
+            // 2. Check Corner Turn Zone & Pre-buffered Turn Input
+            const distToCorner = currentRunLength - runProgress;
+            updateTurnPromptUI(distToCorner);
+
+            if (queuedTurnDir && isInsideTurnZone()) {
+                const turnToMake = queuedTurnDir;
+                queuedTurnDir = null;
+                executeCornerTurn(turnToMake);
+            }
+
+            // Check if player missed the corner turn completely and ran straight into the ruin wall / abyss!
+            if (activeCorner && !activeCorner.resolved && distToCorner < -5.8) {
+                triggerGameOver(
+                    'MISSED THE TURN!',
+                    'You failed to turn at the 90° temple corner and crashed off the causeway!',
+                    'fa-solid fa-person-falling-burst'
+                );
+                return;
+            }
+
+            // 3. Smooth Lateral Lane Interpolation
+            const targetLaneOffset = LANES[currentLane];
+            const prevLaneOffset = laneOffset;
+            laneOffset = THREE.MathUtils.lerp(laneOffset, targetLaneOffset, Math.min(1, dt * 15));
+
+            // 4. Vertical Jump & Slide Physics
+            if (isJumping) {
+                playerY += playerVelocityY * dt;
+                playerVelocityY += GRAVITY * dt;
+                if (playerY <= 0) {
+                    playerY = 0;
+                    playerVelocityY = 0;
+                    isJumping = false;
+                }
+            }
+
+            if (isSliding) {
+                slideTimer -= dt;
+                torsoGroup.scale.y = 0.48;
+                torsoGroup.position.y = 0.72;
+                torsoGroup.rotation.x = -0.45;
+                if (slideTimer <= 0) {
+                    endSlide();
+                }
+            }
+
+            // 5. Compute Player World Position & Rotation from (pathAnchor + forward * runProgress + right * laneOffset)
+            const forward = DIR_VECTORS[currentDir];
+            const right = RIGHT_VECTORS[currentDir];
+            const worldPos = pathAnchor
+                .clone()
+                .addScaledVector(forward, runProgress)
+                .addScaledVector(right, laneOffset);
+            worldPos.y = playerY;
+
+            playerGroup.position.copy(worldPos);
+            playerGroup.rotation.y = currentYaw;
+            torsoGroup.rotation.z = (prevLaneOffset - laneOffset) * 0.35;
+
+            // 6. Explorer Running Limb Animation
+            runAnimTime += dt * (currentSpeed * 0.55);
+            if (isJumping) {
+                leftLegPivot.rotation.x = -0.65;
+                rightLegPivot.rotation.x = 0.45;
+                leftArmPivot.rotation.x = -0.8;
+                rightArmPivot.rotation.x = -0.8;
+            } else if (isSliding) {
+                leftLegPivot.rotation.x = 1.1;
+                rightLegPivot.rotation.x = 0.85;
+                leftArmPivot.rotation.x = 0.4;
+                rightArmPivot.rotation.x = 0.4;
+            } else {
+                const swing = Math.sin(runAnimTime) * 0.85;
+                leftLegPivot.rotation.x = swing;
+                rightLegPivot.rotation.x = -swing;
+                leftArmPivot.rotation.x = -swing * 0.9;
+                rightArmPivot.rotation.x = swing * 0.9;
+            }
+
+            // 7. Check Coins & Obstacles on Active Straight Segments
+            const tempWorldPos = new THREE.Vector3();
+            for (let seg of activeSegments) {
+                if (seg.type !== 'STRAIGHT') continue;
+
+                // Coins
+                for (let c of seg.coins) {
+                    if (c.collected) continue;
+                    c.mesh.rotation.y += dt * 3.5;
+                    c.mesh.getWorldPosition(tempWorldPos);
+
+                    const dx = tempWorldPos.x - worldPos.x;
+                    const dz = tempWorldPos.z - worldPos.z;
+                    const horizDist = Math.hypot(dx, dz);
+                    const playerCenterY = playerY + (isSliding ? 0.65 : 1.25);
+                    const dy = Math.abs(tempWorldPos.y - playerCenterY);
+
+                    if (horizDist < 1.35 && dy < 1.45) {
+                        c.collected = true;
+                        c.mesh.visible = false;
+                        coinsCollected++;
+                        score += 25;
+                        sfx.playCoin();
+                        spawnBurst(tempWorldPos, 0xffd700, 8);
+                    }
+                }
+
+                // Obstacles (Two-Stage Stumble & Chaser Beast Mechanic)
+                for (let o of seg.obstacles) {
+                    if (o.hit) continue;
+                    o.mesh.getWorldPosition(tempWorldPos);
+
+                    const dx = tempWorldPos.x - worldPos.x;
+                    const dz = tempWorldPos.z - worldPos.z;
+                    const horizDist = Math.hypot(dx, dz);
+
+                    if (horizDist < 1.12) {
+                        let collided = false;
+                        let reason = '';
+
+                        if (o.type === 'LOW') {
+                            if (playerY < 1.15) {
+                                collided = true;
+                                reason = 'Clipped a spiked temple hurdle';
+                            }
+                        } else if (o.type === 'HIGH') {
+                            if (!isSliding || playerY > 0.35) {
+                                collided = true;
+                                reason = 'Struck an overhead fire beam';
+                            }
+                        } else if (o.type === 'PILLAR') {
+                            collided = true;
+                            reason = 'Hit an ancient stone obelisk';
+                        }
+
+                        if (collided) {
+                            o.hit = true;
+                            // Destroy/shatter the obstacle visually and trigger stumble (or Beast Catch if already chased!)
+                            o.mesh.visible = false;
+                            triggerPlayerStumble(reason);
+                            if (gameState !== 'PLAYING') return;
+                        }
+                    }
+                }
+            }
+
+            // 8. Update Chaser Beast Pack & Camera
+            updateChaserPosition(dt);
+            updateHUD();
+            updateCameraTransform(dt);
+        }
+
+        // --- EVENT LISTENERS ---
+        function bindEvents() {
+            window.addEventListener('keydown', (e) => {
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                    e.preventDefault();
+                }
+
+                if (gameState !== 'PLAYING') {
+                    if (e.code === 'Space' || e.code === 'Enter') {
+                        startGame();
+                    }
+                    return;
+                }
+
+                switch (e.code) {
+                    case 'ArrowLeft':
+                    case 'KeyA':
+                        handleLeftInput();
+                        break;
+                    case 'ArrowRight':
+                    case 'KeyD':
+                        handleRightInput();
+                        break;
+                    case 'ArrowUp':
+                    case 'KeyW':
+                    case 'Space':
+                        triggerJump();
+                        break;
+                    case 'ArrowDown':
+                    case 'KeyS':
+                        triggerSlide();
+                        break;
+                }
+            });
+
+            const bindControlBtn = (id, action) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    action();
+                });
+            };
+
+            bindControlBtn('btn-left', handleLeftInput);
+            bindControlBtn('btn-right', handleRightInput);
+            bindControlBtn('btn-jump', triggerJump);
+            bindControlBtn('btn-slide', triggerSlide);
+
+            document.getElementById('btn-reset-cam').addEventListener('click', () => {
+                camAzimuth = 0;
+                camElevation = 0.42;
+                updateCameraTransform(0.1);
+            });
+
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', startGame);
+
+            document.getElementById('mute-btn').addEventListener('click', () => {
+                sfx.init();
+                const isMuted = sfx.toggleMute();
+                const icon = document.getElementById('mute-icon');
+                icon.className = isMuted
+                    ? 'fa-solid fa-volume-xmark text-base sm:text-lg text-red-400'
+                    : 'fa-solid fa-volume-high text-base sm:text-lg text-amber-300';
+            });
+
+            // Touch Swipe Gestures
+            const canvasEl = renderer.domElement;
+            canvasEl.addEventListener('touchstart', (e) => {
+                if (e.touches.length > 0) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    touchStartTime = performance.now();
+                }
+            }, { passive: true });
+
+            canvasEl.addEventListener('touchmove', (e) => {
+                if (e.cancelable) e.preventDefault();
+            }, { passive: false });
+
+            canvasEl.addEventListener('touchend', (e) => {
+                if (gameState !== 'PLAYING' || e.changedTouches.length === 0) return;
+                const dx = e.changedTouches[0].clientX - touchStartX;
+                const dy = e.changedTouches[0].clientY - touchStartY;
+                const dt = performance.now() - touchStartTime;
+
+                const minSwipeDist = 26;
+                if (dt < 600 && (Math.abs(dx) > minSwipeDist || Math.abs(dy) > minSwipeDist)) {
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        if (dx > 0) handleRightInput();
+                        else handleLeftInput();
+                    } else {
+                        if (dy < 0) triggerJump();
+                        else triggerSlide();
+                    }
+                }
+            }, { passive: true });
+
+            // Mouse Camera Angle Orbit
+            canvasEl.addEventListener('mousedown', (e) => {
+                isDraggingCamera = true;
+                prevMousePos = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDraggingCamera) return;
+                const dx = e.clientX - prevMousePos.x;
+                const dy = e.clientY - prevMousePos.y;
+                prevMousePos = { x: e.clientX, y: e.clientY };
+
+                camAzimuth = THREE.MathUtils.clamp(camAzimuth - dx * 0.006, -0.85, 0.85);
+                camElevation = THREE.MathUtils.clamp(camElevation + dy * 0.005, 0.18, 0.85);
+                updateCameraTransform(0.016);
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDraggingCamera = false;
+            });
+
+            // Responsive Resize Handler
+            window.addEventListener('resize', () => {
+                const container = document.getElementById('canvas-container');
+                if (!container || !renderer || !camera) return;
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            });
+        }
+
+        // --- RENDER & ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            updateGame(dt);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initGame();
+            animate();
+        };
+    </script>
+</body>
+</html>
